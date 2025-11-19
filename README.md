@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2025 Łukasz Niemier <~@hauleth.dev>
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # e9p
 
 Implementation of [9p2000][] file protocol in Erlang

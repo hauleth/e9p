@@ -1,3 +1,6 @@
+% SPDX-FileCopyrightText: 2025 Łukasz Niemier <~@hauleth.dev>
+%
+% SPDX-License-Identifier: Apache-2.0
 {application, e9p,
  [{description, "An OTP library"},
   {vsn, "0.1.0"},

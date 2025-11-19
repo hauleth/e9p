@@ -1,3 +1,7 @@
+% SPDX-FileCopyrightText: 2025 Łukasz Niemier <~@hauleth.dev>
+%
+% SPDX-License-Identifier: Apache-2.0
+
 %% @doc Definition of 9p filesystem
 %% @end
 -module(e9p_fs).
