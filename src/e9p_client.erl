@@ -51,13 +51,11 @@ handle_call({attach, Auth, Uname, Aname}, From, State) ->
             Id ->
                 Id
         end,
-    Msg = #{type => tattach,
-            data =>
-                #{fid => Fid,
+    Msg = #{fid => Fid,
                   afid => Afid,
                   uname => Uname,
-                  aname => Aname}},
-    e9p_transport:send(Socket, Tag, Msg),
+                  aname => Aname},
+    e9p_transport:send(Socket, Tag, tattach, Msg),
     {noreply,
      State#{tag := Tag + 1,
             fid := Fid + 1,
@@ -71,7 +69,7 @@ handle_cast(_Msg, State) ->
 handle_info({tcp, Socket, Data}, #{socket := Socket} = State) ->
     #{buffer := Buffer, msgs := Msgs0} = State,
     case e9p_transport:read_stream(<<Buffer/binary, Data/binary>>) of
-        {ok, Tag, Msg, Rest} ->
+        {ok, Tag, _Type, Msg, Rest} ->
             Msgs =
                 case maps:take(Tag, Msgs0) of
                     {{From, _}, M} ->
@@ -87,11 +85,10 @@ handle_info({tcp, Socket, Data}, #{socket := Socket} = State) ->
     end.
 
 version_negotiation(Socket) ->
-    Msg = #{type => tversion,
-            data => #{max_packet_size => ?max_packet_size, version => ?version}},
-    e9p_transport:send(Socket, notag, Msg),
+    Msg = #{max_packet_size => ?max_packet_size, version => ?version},
+    e9p_transport:send(Socket, notag, tversion, Msg),
     case e9p_transport:read(Socket) of
-        {ok, _, #{type := rversion, data := Resp}} ->
+        {ok, _, rversion, Resp} ->
             {ok, Resp};
         {error, _} = Error ->
             Error

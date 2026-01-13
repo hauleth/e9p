@@ -6,13 +6,13 @@
 %% @end
 -module(e9p_msg).
 
--export([parse/2, encode/2, encode/3]).
+-export([parse/1, encode/3]).
 
 -export_type([tag/0,
               message_type/0,
               request_message_type/0,
-              response_message_type/0,
-              message/0]).
+              response_message_type/0
+             ]).
 
 -include("e9p_internal.hrl").
 
@@ -50,15 +50,10 @@
 
 -type message_type() :: request_message_type() | response_message_type().
 
--type message() :: #{type => message_type(),
-                     data => map()}.
-
--spec parse(Type :: byte(), Message :: binary()) -> {ok, message()} | {error, term()}.
-parse(Type, Data) ->
+parse(<<Type:1/?int, Tag:2/?int, Data/binary>>) ->
     case do_parse(Type, Data) of
         {ok, T, Parsed} ->
-            {ok, #{type => T, data => Parsed}};
-
+            {ok, Tag, T, Parsed};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -162,6 +157,11 @@ do_parse(?Twalk, <<FID:4/?int, NewFID:4/?int, NWNLen:?len, Rest/binary>>) ->
 do_parse(?Rwalk, <<NWQLen:?len, QIDs:(NWQLen * 13)/binary>>) ->
     {ok, rwalk, #{qids => [binary_to_qid(QID) || <<QID:13/binary>> <= QIDs]}};
 
+do_parse(?Tread, <<FID:4/?int, Offset:8/?int, Count:4/?int>>) ->
+    {ok, tread, #{fid => FID, offset => Offset, count => Count}};
+do_parse(?Rread, <<Count:4/?int, Data:Count/?int>>) ->
+    {ok, rread, #{data => Data}};
+
 do_parse(Type, Data) ->
     {error, {invalid_message, Type, Data}}.
 
@@ -193,10 +193,6 @@ parse_stat(<<_Size:2/?int,
           }};
 parse_stat(_) -> {error, invalid_stat_data}.
 
--spec encode(Tag :: tag() | notag, Message :: message()) -> iodata().
-encode(Tag, #{type := Type, data := Data}) ->
-    encode(Tag, Type, Data).
-
 -spec encode(Tag :: tag() | notag, Type :: message_type(), Data :: map()) -> iodata().
 encode(Tag, Type, Data) ->
     {MT, Encoded} = do_encode(Type, Data),
@@ -204,8 +200,7 @@ encode(Tag, Type, Data) ->
                notag -> ?notag;
                V -> V
            end,
-    Size = iolist_size(Encoded) + 7,
-    [<<Size:4/?int, MT:1/?int, Tag0:2/?int>> | Encoded].
+    [<<MT:1/?int, Tag0:2/?int>> | Encoded].
 
 do_encode(tversion, #{max_packet_size := MSize, version := Version}) ->
     {?Tversion, [<<MSize:4/?int>> | encode_str(Version)]};
@@ -252,11 +247,13 @@ do_encode(rremove, _) ->
 
 do_encode(tstat, #{fid := FID}) ->
     {?Tstat, <<FID:4/?int>>};
-do_encode(rstat, _Data) ->
-    error(unimplemented);
+do_encode(rstat, #{stat := Stat}) ->
+    {?Rstat, encode_stat(Stat)};
 
-do_encode(twstat, #{fid := _FID, stat := _Stat}) ->
-    error(unimplemented);
+do_encode(twstat, #{fid := FID, stat := Stat}) ->
+    {?Twstat, [<<FID:4/?int>>, encode_stat(Stat)]};
+do_encode(rwstat, _) ->
+    {?Rwstat, []};
 
 do_encode(twalk, #{fid := FID, new_fid := NewFID, names := Names}) ->
     ENames = [encode_str(Name) || Name <- Names],
@@ -265,7 +262,44 @@ do_encode(twalk, #{fid := FID, new_fid := NewFID, names := Names}) ->
 do_encode(rwalk, #{qids := QIDs}) ->
     EQIDs = [qid_to_binary(QID) || QID <- QIDs],
     Len = length(EQIDs),
-    {?Rwalk, [<<Len:?len>> | EQIDs]}.
+    {?Rwalk, [<<Len:?len>> | EQIDs]};
+
+do_encode(tread, #{fid := FID, offset := Offset, count := Count}) ->
+    {?Tread, <<FID:4/?int, Offset:8/?int, Count:4/?int>>};
+do_encode(rread, #{data := Data}) ->
+    {?Rread, encode_str(Data)}.
+
+encode_stat(#{
+           type := Type,
+           dev := Dev,
+           qid := QID,
+           mode := Mode,
+           atime := Atime,
+           mtime := Mtime,
+           length := Len,
+           name := Name,
+           uid := Uid,
+           gid := Gid,
+           muid := MUid
+          }) ->
+    Encoded = [<<
+                 Type:2/?int,
+                 Dev:2/?int
+               >>,
+               qid_to_binary(QID),
+               <<Mode:4/?int>>,
+               time_to_encoded_sec(Atime),
+               time_to_encoded_sec(Mtime),
+               <<Len:8/?int>>,
+               encode_str(Name),
+               encode_str(Uid),
+               encode_str(Gid),
+               encode_str(MUid)
+              ],
+    encode_str(Encoded).
+
+
+%% ========== Utilities ==========
 
 encode_str(Data) ->
     Len = iolist_size(Data),
@@ -276,3 +310,7 @@ binary_to_qid(<<Type:1/?int, Version:4/?int, Path:8/?int>>) ->
 
 qid_to_binary(#{type := Type, version := Version, path := Path}) ->
     <<Type:1/?int, Version:4/?int, Path:8/?int>>.
+
+time_to_encoded_sec(Time) ->
+    Sec = calendar:universal_time_to_system_time(Time, [{unit, second}]),
+    <<Sec:4/?int>>.

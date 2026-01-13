@@ -6,88 +6,152 @@
 %% @end
 -module(e9p_fs).
 
-% -behaviour(gen_server).
+-export([
+         init/1,
+         root/2,
+         walk/3,
+         open/2,
+         create/5,
+         read/4,
+         write/4,
+         clunk/2,
+         remove/2,
+         stat/2,
+         wstat/3
+        ]).
 
--export([start_link/2, walk/3]).
-
--export([init/1, handle_call/3]).
-
--export_type([fs/0, state/0]).
-
--opaque fs() :: pid().
+-export_type([state/0]).
 
 -type state() :: term().
+-type result() :: {ok, state()} | {error, term(), state()}.
+-type result(T) :: {ok, T, state()} | {error, term(), state()}.
+
+-define(if_supported(Code),
+        case erlang:function_exported(Mod, ?FUNCTION_NAME, ?FUNCTION_ARITY) of
+             true ->
+                case (fun() -> Code end)() of
+                    {ok, Ret, {Mod, NewState}} ->
+                        {ok, Ret, {Mod, NewState}};
+                    {error, Error, NewState} ->
+                        {error, Error, {Mod, NewState}}
+                end;
+             false -> {error, nosupport, {Mod, State}}
+         end).
 
 %% Setup state for given filesystem.
--callback init(term()) -> state().
+-callback init(term()) ->
+    {ok, state()} |
+    {error, Reason :: term()}.
 
 %% Returns `QID' for root node.
 %%
 %% If implementation provides multiple trees then the `AName' will be set to the
 %% tree defined by the client. It is left to the implementation to ensure the
 %% constraints of the file root (aka `walk(Root, "..", State0) =:= {Root, State1}'.
--callback root(AName :: unicode:chardata(), state()) -> {e9p:qid(), state()}.
+-callback root(AName :: unicode:chardata(), state()) -> {ok, e9p:qid(), state()}.
+
+-callback flush(state()) -> {ok, state()} | {error, term(), state()}.
 
 %% Walk through the given path starting at the `QID'
 -callback walk(QID :: e9p:qid(), unicode:chardata(), state()) ->
     {e9p:qid() | false, state()}.
 
-%% Return stat data for file indicated by `QID'
--callback stat(QID :: e9p:qid(), state()) -> {ok, map(), state()} | {error, term(), state()}.
+-callback open(QID :: e9p:qid(), state()) -> result(e9p:u32()).
+
+-callback create(QID :: e9p:qid(),
+                 Name :: unicode:chardata(),
+                 Perm :: e9p:u32(),
+                 Mode :: e9p:u8(),
+                 state()) -> result({e9p:qid(), e9p:u32()}).
 
 %% Read data from file indicated by `QID'
 -callback read(QID :: e9p:qid(),
                Offset :: non_neg_integer(),
                Length :: non_neg_integer(),
-               state()) -> {ok, iodata(), state()} | {error, term(), state()}.
+               state()) -> result(iodata()).
 
 %% Write data to file indicated by `QID'
 -callback write(QID :: e9p:qid(),
                 Offset :: non_neg_integer(),
                 Data :: iodata(),
-                state()) -> {ok, non_neg_integer(), state()} | {error, term(), state()}.
+                state()) -> result(non_neg_integer()).
 
-%% @doc Walk through the filesystem.
-%%
-%% Walks through `List' entries starting at `QID'. It will stop at first path
-%% that cannot be walked into. This mean, that returned list length will be
-%% equal <b>or less</b> than the `length(List)'.
--spec walk(fs(), e9p:qid(), [unicode:chardata()]) -> {ok, [e9p:qid()]} | {error, term()}.
-walk(FS, QID, List) ->
-    List0 = e9p_utils:normalize_path(List, []),
-    case List of
-        [] -> {ok, []};
-        [_|_] -> gen_server:call(FS, {walk, QID, List0})
+-callback clunk(QID :: e9p:qid(), state()) -> result().
+
+-callback remove(QID :: e9p:qid(), state()) -> result().
+
+%% Return stat data for file indicated by `QID'
+-callback stat(QID :: e9p:qid(), state()) -> result(map()).
+
+%% Write stat data for file indicated by `QID'
+-callback wstat(QID :: e9p:qid(), map(), state()) -> result().
+
+-optional_callbacks([
+                     flush/1,
+                     walk/3,
+                     open/2,
+                     create/5,
+                     read/4,
+                     write/4,
+                     clunk/2,
+                     remove/2,
+                     stat/2,
+                     wstat/3
+                    ]).
+
+init({Mod, State}) ->
+    case Mod:init(State) of
+        {ok, NewState} -> {ok, {Mod, NewState}};
+        Error -> Error
     end.
 
-%% @private
-start_link(Impl, Init) ->
-    gen_server:start_link(?MODULE, {Impl, Init}, []).
-
-%% @private
-init({Impl, Init}) ->
-    case Impl:init(Init) of
-        {ok, State0} ->
-            {ok, #{mod => Impl, state => State0}};
-        {error, _} = Error ->
-            Error
+root({Mod, State}, AName) ->
+    case Mod:root(AName, State) of
+        {ok, QID, NewState} ->
+            {ok, QID, {Mod, NewState}}
     end.
 
-%% @private
-handle_call({walk, QID, List}, _From, #{mod := Mod, state := State0}) ->
-    {QIDs, State} = do_walk(Mod, QID, List, State0),
-    {reply, {ok, QIDs}, State}.
+-doc """
+Walk through paths starting at QID.
+""".
+walk({Mod, State}, QID, Paths) when is_atom(Mod) ->
+    ?if_supported(do_walk(Mod, QID, Paths, State, [])).
 
-%% Walk through the FS tree.
-do_walk(Mod, QID, List, State) ->
-    do_walk(Mod, QID, List, State, []).
-
-do_walk(_Mod, _QID, [], State, Acc) ->
-    {lists:reverse(Acc), State};
+do_walk(Mod, QID, [], State, Acc) ->
+    {ok, QID, lists:reverse(Acc), {Mod, State}};
 do_walk(Mod, QID0, [P | Rest], State0, Acc) ->
     case Mod:walk(QID0, P, State0) of
         {false, State} ->
-            {lists:reverse(Acc), State};
-        {QID1, State} ->
-            do_walk(Mod, QID1, Rest, State, [QID1 | Acc])
+            {ok, QID0, lists:reverse(Acc), {Mod, State}};
+        {QID, State} ->
+            do_walk(Mod, QID, Rest, State, [QID | Acc])
     end.
+
+open({Mod, State}, QID) ->
+    ?if_supported(Mod:open(QID, State)).
+
+create({Mod, State}, QID, Name, Perm, Mode) ->
+    ?if_supported(Mod:create(QID, Name, Perm, Mode, State)).
+
+read({Mod, State}, QID, Offset, Length) ->
+    ?if_supported(Mod:read(QID, Offset, Length, State)).
+
+write({Mod, State}, QID, Offset, Data) ->
+    ?if_supported(Mod:write(QID, Offset, Data, State)).
+
+clunk({Mod, State}, QID) ->
+    case erlang:function_exported(Mod, clunk, 3) of
+        true ->
+            {Resp, State} = Mod:clunk(QID, State),
+            {Resp, {Mod, State}};
+        false -> {ok, {Mod, State}}
+    end.
+
+remove({Mod, State}, QID) ->
+    ?if_supported(Mod:remove(QID, State)).
+
+stat({Mod, State}, QID) ->
+    ?if_supported(Mod:stat(QID, State)).
+
+wstat({Mod, State}, QID, Stat) ->
+    ?if_supported(Mod:wstat(QID, Stat, State)).
