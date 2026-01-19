@@ -1,6 +1,6 @@
 % SPDX-FileCopyrightText: 2026 Łukasz Niemier <~@hauleth.dev>
 %
-% SPDX-License-Identifier: Apache-2.0
+% SPDX-License-Identifier: GPL-3.0-only
 
 -module(prop_e9p_msg).
 
@@ -8,7 +8,12 @@
 -include_lib("proper/include/proper.hrl").
 % -include_lib("stdlib/include/assert.hrl").
 
-afid() -> integer(16#0000, 16#FFFF).
+int(N) ->
+    Min = 0,
+    Max = 1 bsl (N * 8) - 1,
+    integer(Min, Max).
+
+afid() -> int(2).
 
 prop_can_decode_encoded_tversion() ->
     ?FORALL({Version, MPS}, {binary(), afid()},
@@ -23,7 +28,7 @@ prop_can_decode_encoded_rversion() ->
             end).
 
 prop_can_decode_encoded_tauth() ->
-    ?FORALL({Afid, Uname, Aname}, {integer(0, 16#FFFF), binary(), binary()},
+    ?FORALL({Afid, Uname, Aname}, {afid(), binary(), binary()},
             begin
                 enc_dec(#tauth{afid = Afid, uname = Uname, aname = Aname})
             end).
@@ -34,6 +39,26 @@ prop_can_decode_encoded_rerror() ->
                 enc_dec(#rerror{msg = Msg})
             end).
 
+prop_can_decode_encoded_rstat() ->
+    ?FORALL({Type, Dev, Mode, Atime, Mtime, Len, Name, Uid, Gid, Muid},
+            {int(2), int(2), int(4), int(4), int(4), int(8), binary(), binary(),
+             binary(), binary()},
+            begin
+                enc_dec(#rstat{
+                  stat = #{
+                           type => Type,
+                           dev => Dev,
+                           qid => e9p:make_qid(directory, 0, 0, []),
+                           mode => Mode,
+                           atime => Atime,
+                           mtime => Mtime,
+                           length => Len,
+                           name => Name,
+                           uid => Uid,
+                           gid => Gid,
+                           muid => Muid
+                          }})
+            end).
 
 enc_dec(Data) ->
     Tag = 1,
