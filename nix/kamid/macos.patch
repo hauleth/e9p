@@ -1,0 +1,56 @@
+diff --git i/compat.h w/compat.h
+index 2819b0e..349865e 100644
+--- i/compat.h
++++ w/compat.h
+@@ -193,4 +193,7 @@ long long	 strtonum(const char *, long long, long long, const char **);
+ # include "compat/vis.h"
+ #endif
+ 
++#define SOCK_CLOEXEC 0
++#define SOCK_NONBLOCK 0
++
+ #endif	/* COMPAT_H */
+diff --git i/kamid/client.c w/kamid/client.c
+index 33e0206..063c698 100644
+--- i/kamid/client.c
++++ w/kamid/client.c
+@@ -418,7 +418,7 @@ qid_update_from_sb(struct qid *qid, struct stat *sb)
+ 	 * Theoretically (and hopefully!) this should be a 64 bit
+ 	 * number.  Unfortunately, 9P uses 32 bit timestamps.
+ 	 */
+-	qid->vers = sb->st_mtim.tv_sec;
++	qid->vers = sb->st_mtime;
+ 
+ 	if (S_ISREG(sb->st_mode))
+ 		qid->type = QTFILE;
+@@ -1477,8 +1477,8 @@ serialize_stat(const char *fname, struct stat *sb, struct evbuffer *evb)
+ 	np_write32(evb, sb->st_dev);		/*	dev[4]		*/
+ 	np_qid(evb, &qid);			/*	qid[13]		*/
+ 	np_write32(evb, mode);			/*	mode[4]		*/
+-	np_write32(evb, sb->st_atim.tv_sec);	/*	atime[4]	*/
+-	np_write32(evb, sb->st_mtim.tv_sec);	/*	mtime[4]	*/
++	np_write32(evb, sb->st_atime);	/*	atime[4]	*/
++	np_write32(evb, sb->st_mtime);	/*	mtime[4]	*/
+ 
+ 	/* special case: directories have size 0 */
+ 	if (qid.type & QTDIR)
+diff --git i/kamid/control.c w/kamid/control.c
+index 9fef9a5..dd44435 100644
+--- i/kamid/control.c
++++ w/kamid/control.c
+@@ -67,12 +67,14 @@ control_init(const char *path)
+ 	int			 fd;
+ 	mode_t			 old_umask;
+ 
+-	if ((fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK,
++	if ((fd = socket(AF_UNIX, SOCK_STREAM,
+ 	    0)) == -1) {
+ 		log_warn("%s: socket", __func__);
+ 		return (-1);
+ 	}
+ 
++        fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK | O_CLOEXEC);
++
+ 	memset(&sun, 0, sizeof(sun));
+ 	sun.sun_family = AF_UNIX;
+ 	strlcpy(sun.sun_path, path, sizeof(sun.sun_path));

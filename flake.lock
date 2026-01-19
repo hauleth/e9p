@@ -159,6 +159,22 @@
         "type": "github"
       }
     },
+    "kamid": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1730762973,
+        "narHash": "sha256-FQA/nfc3/WqzN1FY5pBOxK2coc1Tw+hn9H4NvF7oCAU=",
+        "owner": "omar-polo",
+        "repo": "kamid",
+        "rev": "48e3b41db1a35f09e072985a9f238ca202999247",
+        "type": "github"
+      },
+      "original": {
+        "owner": "omar-polo",
+        "repo": "kamid",
+        "type": "github"
+      }
+    },
     "nix": {
       "inputs": {
         "flake-compat": [
@@ -250,6 +266,7 @@
       "inputs": {
         "devenv": "devenv",
         "flake-parts": "flake-parts_2",
+        "kamid": "kamid",
         "nixpkgs": "nixpkgs_2",
         "systems": "systems"
       }
