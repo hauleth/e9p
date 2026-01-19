@@ -56,7 +56,7 @@
 -callback walk(QID :: e9p:qid(), unicode:chardata(), state()) ->
     {e9p:qid() | false, state()}.
 
--callback open(QID :: e9p:qid(), state()) -> result(e9p:u32()).
+-callback open(QID :: e9p:qid(), state()) -> result({e9p:qid(), e9p:u32()}).
 
 -callback create(QID :: e9p:qid(),
                  Name :: unicode:chardata(),

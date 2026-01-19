@@ -27,7 +27,7 @@
 %-spec make_qid()
 make_qid(Type, Version, Path, State) ->
     #{
-      type => e9p_utils:qtype_from_atom(Type),
+      type => e9p_utils:to_qtype(Type),
       version => Version,
       path => Path,
       state => State

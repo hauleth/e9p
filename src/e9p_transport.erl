@@ -6,10 +6,10 @@
 
 -include("e9p_internal.hrl").
 
--export([send/4, read/1, read_stream/1]).
+-export([send/3, read/1, read_stream/1]).
 
-send(Socket, Tag, Type, Message) ->
-    Encoded = e9p_msg:encode(Tag, Type, Message),
+send(Socket, Tag, Message) ->
+    Encoded = e9p_msg:encode(Tag, Message),
     Size = iolist_size(Encoded) + 4,
     gen_tcp:send(Socket, [<<Size:4/?int>>, Encoded]).
 
@@ -19,8 +19,8 @@ read(Socket) ->
             case gen_tcp:recv(Socket, Size - 4) of
                 {ok, Data} when is_binary(Data) ->
                     case e9p_msg:parse(Data) of
-                        {ok, Tag, Type, Msg} ->
-                            {ok, Tag, Type, Msg};
+                        {ok, Tag, Msg} ->
+                            {ok, Tag, Msg};
                         {error, _} = Error ->
                             Error
                     end;
@@ -33,8 +33,8 @@ read(Socket) ->
 
 read_stream(<<Size:4/?int, Data:(Size - 4)/binary, Rest/binary>> = Input) ->
     case e9p_msg:parse(Data) of
-        {ok, Tag, Type, Msg} ->
-            {ok, Tag, Type, Msg, Rest};
+        {ok, Tag, Msg} ->
+            {ok, Tag, Msg, Rest};
         {error, Error} ->
             {error, Error, Input}
     end;

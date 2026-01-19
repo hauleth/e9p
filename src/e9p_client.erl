@@ -22,7 +22,7 @@ start_link(Host, Port, Opts) ->
 init({Host, Port, _Opts}) ->
     {ok, Socket} = gen_tcp:connect(Host, Port, [{active, false}, binary]),
     case version_negotiation(Socket) of
-        {ok, #{max_packet_size := MaxPacketSize, version := ?version}} ->
+        {ok, #rversion{max_packet_size = MaxPacketSize, version = ?version}} ->
             inet:setopts(Socket, [{active, once}]),
             {ok,
              #{socket => Socket,
@@ -32,7 +32,7 @@ init({Host, Port, _Opts}) ->
                msgs => #{},
                max_packet_size => MaxPacketSize,
                version => ?version}};
-        {ok, _, #{version := OtherVersion}} ->
+        {ok, #rversion{version = OtherVersion}} ->
             {error, {unsupported_version, OtherVersion}};
         {error, _} = Error ->
             Error
@@ -51,11 +51,11 @@ handle_call({attach, Auth, Uname, Aname}, From, State) ->
             Id ->
                 Id
         end,
-    Msg = #{fid => Fid,
-                  afid => Afid,
-                  uname => Uname,
-                  aname => Aname},
-    e9p_transport:send(Socket, Tag, tattach, Msg),
+    Msg = #tattach{fid = Fid,
+                  afid = Afid,
+                  uname = Uname,
+                  aname = Aname},
+    e9p_transport:send(Socket, Tag, Msg),
     {noreply,
      State#{tag := Tag + 1,
             fid := Fid + 1,
@@ -68,8 +68,9 @@ handle_cast(_Msg, State) ->
 
 handle_info({tcp, Socket, Data}, #{socket := Socket} = State) ->
     #{buffer := Buffer, msgs := Msgs0} = State,
+    inet:setopts(Socket, [{active, once}]),
     case e9p_transport:read_stream(<<Buffer/binary, Data/binary>>) of
-        {ok, Tag, _Type, Msg, Rest} ->
+        {ok, Tag, Msg, Rest} ->
             Msgs =
                 case maps:take(Tag, Msgs0) of
                     {{From, _}, M} ->
@@ -85,10 +86,10 @@ handle_info({tcp, Socket, Data}, #{socket := Socket} = State) ->
     end.
 
 version_negotiation(Socket) ->
-    Msg = #{max_packet_size => ?max_packet_size, version => ?version},
-    e9p_transport:send(Socket, notag, tversion, Msg),
+    Msg = #tversion{max_packet_size = ?max_packet_size, version = ?version},
+    e9p_transport:send(Socket, notag, Msg),
     case e9p_transport:read(Socket) of
-        {ok, _, rversion, Resp} ->
+        {ok, _, Resp} ->
             {ok, Resp};
         {error, _} = Error ->
             Error

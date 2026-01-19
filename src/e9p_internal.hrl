@@ -52,3 +52,44 @@
 
 -define(Twstat, 126).
 -define(Rwstat, 127).
+
+-record(tversion, {max_packet_size, version}).
+-record(rversion, {max_packet_size, version}).
+
+-record(tauth, {afid, uname, aname}).
+-record(rauth, {aqid}).
+
+-record(rerror, {msg}).
+
+-record(tflush, {tag}).
+-record(rflush, {}).
+
+-record(tattach, {fid, afid, uname, aname}).
+-record(rattach, {qid}).
+
+-record(twalk, {fid, new_fid, names}).
+-record(rwalk, {qids}).
+
+-record(topen, {fid, mode}).
+-record(ropen, {qid, io_unit}).
+
+-record(tcreate, {fid, name, perm, mode}).
+-record(rcreate, {qid, io_unit}).
+
+-record(tread, {fid, offset, len}).
+-record(rread, {data}).
+
+-record(twrite, {fid, offset, data}).
+-record(rwrite, {len}).
+
+-record(tclunk, {fid}).
+-record(rclunk, {}).
+
+-record(tremove, {fid}).
+-record(rremove, {}).
+
+-record(tstat, {fid}).
+-record(rstat, {stat}).
+
+-record(twstat, {fid, stat}).
+-record(rwstat, {}).
