@@ -6,7 +6,7 @@
 %% @end
 -module(e9p_msg).
 
--export([parse/1, encode/2, encode_stat/1]).
+-export([parse/1, encode/2, encode_stat/1, parse_stat/1]).
 
 -export_type([tag/0,
               message/0,
@@ -166,8 +166,7 @@ do_parse(?Rread, <<Count:4/?int, Data:Count/?int>>) ->
 do_parse(Type, Data) ->
     {error, {invalid_message, Type, Data}}.
 
-parse_stat(<<_Size:2/?int,
-             Type:2/?int,
+parse_stat(<<Type:2/?int,
              Dev:4/?int,
              QID:13/binary,
              Mode:4/?int,
@@ -184,8 +183,8 @@ parse_stat(<<_Size:2/?int,
            dev => Dev,
            qid => binary_to_qid(QID),
            mode => Mode,
-           atime => calendar:system_time_to_universal_time(Atime, seconds),
-           mtime => calendar:system_time_to_universal_time(Mtime, seconds),
+           atime => Atime,
+           mtime => Mtime,
            length => Len,
            name => Name,
            uid => Uid,
@@ -285,7 +284,7 @@ encode_stat(#{
           }) ->
     Encoded = [<<
                  Type:2/?int,
-                 Dev:2/?int
+                 Dev:4/?int
                >>,
                qid_to_binary(QID),
                <<Mode:4/?int>>,
@@ -307,11 +306,12 @@ encode_str(Data) ->
     [<<Len:?len>> | Data].
 
 binary_to_qid(<<Type:1/?int, Version:4/?int, Path:8/?int>>) ->
-    #{type => Type, version => Version, path => Path}.
+    #{type => Type, version => Version, path => Path, state => []}.
 
 qid_to_binary(#{type := Type, version := Version, path := Path}) ->
     <<Type:1/?int, Version:4/?int, Path:8/?int>>.
 
+time_to_encoded_sec(Sec) when is_integer(Sec) -> <<Sec:4/?int>>;
 time_to_encoded_sec(Time) ->
     Sec = calendar:universal_time_to_system_time(Time, [{unit, second}]),
     <<Sec:4/?int>>.
