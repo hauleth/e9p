@@ -40,6 +40,7 @@ accept_loop(LSock, Handler) ->
 loop(Sock, FIDs, Handler) ->
     case e9p_transport:read(Sock) of
         {ok, Tag, Data} ->
+            ?LOG_WARNING(#{msg => Data}),
             case handle_message(Data, FIDs, Handler) of
                 {ok, Reply, RFIDs, RHandler} ->
                     e9p_transport:send(Sock, Tag, Reply),
@@ -73,14 +74,15 @@ handle_message(#tattach{fid = FID, uname = _UName, aname = AName}, FIDs, Handler
 handle_message(#twalk{fid = FID, new_fid = NewFID, names = Paths}, FIDs, Handler0) ->
     maybe
         {ok, QID} ?= get_qid(FIDs, FID),
-        {ok, NewQID, QIDs, Handler} ?= e9p_fs:walk(Handler0, QID, Paths),
+        {ok, {NewQID, QIDs}, Handler} ?= e9p_fs:walk(Handler0, QID, Paths),
         {ok, #rwalk{qids = QIDs}, FIDs#{NewFID => NewQID}, Handler}
     end;
 
-handle_message(#topen{fid = FID}, FIDs, Handler0) ->
+handle_message(#topen{fid = FID, mode = Mode}, FIDs, Handler0) ->
     maybe
+        ?LOG_WARNING(#{fids => FIDs}),
         {ok, QID} ?= get_qid(FIDs, FID),
-        {ok, {NewQID, IOUnit}, Handler} ?= e9p_fs:open(Handler0, QID),
+        {ok, {NewQID, IOUnit}, Handler} ?= e9p_fs:open(Handler0, QID, Mode),
         {ok, #ropen{qid = QID, io_unit = IOUnit}, FIDs#{FID => NewQID}, Handler}
     end;
 handle_message(#tcreate{fid = FID, name = Name, perm = Perm, mode = Mode}, FIDs, Handler0) ->
@@ -93,14 +95,14 @@ handle_message(#tcreate{fid = FID, name = Name, perm = Perm, mode = Mode}, FIDs,
 handle_message(#tread{fid = FID, offset = Offset, len = Len}, FIDs, Handler0) ->
     maybe
         {ok, QID} ?= get_qid(FIDs, FID),
-        {ok, Data, Handler} ?= e9p_fs:read(Handler0, QID, Offset, Len),
-        {ok, #rread{data = Data}, FIDs, Handler}
+        {ok, {NQID, Data}, Handler} ?= e9p_fs:read(Handler0, QID, Offset, Len),
+        {ok, #rread{data = Data}, FIDs#{FID => NQID}, Handler}
     end;
 handle_message(#twrite{fid = FID, offset = Offset, data = Data}, FIDs, Handler0) ->
     maybe
         {ok, QID} ?= get_qid(FIDs, FID),
-        {ok, Data, Handler} ?= e9p_fs:write(Handler0, QID, Offset, Data),
-        {ok, #rread{data = Data}, FIDs, Handler}
+        {ok, {NQID, Data}, Handler} ?= e9p_fs:write(Handler0, QID, Offset, Data),
+        {ok, #rread{data = Data}, FIDs#{FID => NQID}, Handler}
     end;
 
 handle_message(#tclunk{fid = FID}, FIDs, Handler0) ->

@@ -6,6 +6,8 @@
 
 -include("e9p_internal.hrl").
 
+% -include_lib("kernel/include/logger.hrl").
+
 -export([send/3, read/1, read_stream/1]).
 
 send(Socket, Tag, Message) ->

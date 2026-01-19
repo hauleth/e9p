@@ -10,7 +10,7 @@
          init/1,
          root/2,
          walk/3,
-         open/2,
+         open/3,
          create/5,
          read/4,
          write/4,
@@ -30,7 +30,7 @@
         case erlang:function_exported(Mod, ?FUNCTION_NAME, ?FUNCTION_ARITY) of
              true ->
                 case (fun() -> Code end)() of
-                    {ok, Ret, {Mod, NewState}} ->
+                    {ok, Ret, NewState} ->
                         {ok, Ret, {Mod, NewState}};
                     {error, Error, NewState} ->
                         {error, Error, {Mod, NewState}}
@@ -56,7 +56,7 @@
 -callback walk(QID :: e9p:qid(), unicode:chardata(), state()) ->
     {e9p:qid() | false, state()}.
 
--callback open(QID :: e9p:qid(), state()) -> result({e9p:qid(), e9p:u32()}).
+-callback open(QID :: e9p:qid(), Mode :: integer(), state()) -> result({e9p:qid(), e9p:u32()}).
 
 -callback create(QID :: e9p:qid(),
                  Name :: unicode:chardata(),
@@ -68,13 +68,13 @@
 -callback read(QID :: e9p:qid(),
                Offset :: non_neg_integer(),
                Length :: non_neg_integer(),
-               state()) -> result(iodata()).
+               state()) -> result({e9p:qid(), iodata()}).
 
 %% Write data to file indicated by `QID'
 -callback write(QID :: e9p:qid(),
                 Offset :: non_neg_integer(),
                 Data :: iodata(),
-                state()) -> result(non_neg_integer()).
+                state()) -> result({e9p:qid(), non_neg_integer()}).
 
 -callback clunk(QID :: e9p:qid(), state()) -> result().
 
@@ -89,7 +89,7 @@
 -optional_callbacks([
                      flush/1,
                      walk/3,
-                     open/2,
+                     open/3,
                      create/5,
                      read/4,
                      write/4,
@@ -117,18 +117,18 @@ Walk through paths starting at QID.
 walk({Mod, State}, QID, Paths) when is_atom(Mod) ->
     ?if_supported(do_walk(Mod, QID, Paths, State, [])).
 
-do_walk(Mod, QID, [], State, Acc) ->
-    {ok, QID, lists:reverse(Acc), {Mod, State}};
+do_walk(_Mod, QID, [], State, Acc) ->
+    {ok, {QID, lists:reverse(Acc)}, State};
 do_walk(Mod, QID0, [P | Rest], State0, Acc) ->
     case Mod:walk(QID0, P, State0) of
         {false, State} ->
-            {ok, QID0, lists:reverse(Acc), {Mod, State}};
+            {ok, {QID0, lists:reverse(Acc)}, State};
         {QID, State} ->
             do_walk(Mod, QID, Rest, State, [QID | Acc])
     end.
 
-open({Mod, State}, QID) ->
-    ?if_supported(Mod:open(QID, State)).
+open({Mod, State}, QID, Mode) ->
+    ?if_supported(Mod:open(QID, Mode, State)).
 
 create({Mod, State}, QID, Name, Perm, Mode) ->
     ?if_supported(Mod:create(QID, Name, Perm, Mode, State)).
@@ -139,12 +139,17 @@ read({Mod, State}, QID, Offset, Length) ->
 write({Mod, State}, QID, Offset, Data) ->
     ?if_supported(Mod:write(QID, Offset, Data, State)).
 
-clunk({Mod, State}, QID) ->
+clunk({Mod, State0}, QID) ->
     case erlang:function_exported(Mod, clunk, 3) of
         true ->
-            {Resp, State} = Mod:clunk(QID, State),
-            {Resp, {Mod, State}};
-        false -> {ok, {Mod, State}}
+            maybe
+                {ok, State} ?= Mod:clunk(QID, State0),
+                {ok, {Mod, State}}
+            else
+                {error, Reason, StateE} ->
+                    {error, Reason, {Mod, StateE}}
+            end;
+        false -> {ok, {Mod, State0}}
     end.
 
 remove({Mod, State}, QID) ->

@@ -248,10 +248,14 @@ do_encode(#rremove{}) ->
 do_encode(#tstat{fid = FID}) ->
     {?Tstat, <<FID:4/?int>>};
 do_encode(#rstat{stat = Stat}) ->
-    {?Rstat, encode_stat(Stat)};
+    Encoded = encode_stat(Stat),
+    Len = iolist_size(Encoded),
+    {?Rstat, [<<Len:?len>> | encode_stat(Stat)]};
 
 do_encode(#twstat{fid = FID, stat = Stat}) ->
-    {?Twstat, [<<FID:4/?int>>, encode_stat(Stat)]};
+    Encoded = encode_stat(Stat),
+    Len = iolist_size(Encoded),
+    {?Twstat, [<<FID:4/?int, Len:?len>> | encode_stat(Stat)]};
 do_encode(#rwstat{}) ->
     {?Rwstat, []};
 
@@ -267,7 +271,8 @@ do_encode(#rwalk{qids = QIDs}) ->
 do_encode(#tread{fid = FID, offset = Offset, len = Len}) ->
     {?Tread, <<FID:4/?int, Offset:8/?int, Len:4/?int>>};
 do_encode(#rread{data = Data}) ->
-    {?Rread, encode_str(Data)}.
+    Len = iolist_size(Data),
+    {?Rread, [<<Len:4/?int>>, Data]}.
 
 encode_stat(#{
            type := Type,
@@ -296,12 +301,14 @@ encode_stat(#{
                encode_str(Gid),
                encode_str(MUid)
               ],
-    encode_str(Encoded).
+    ELen = iolist_size(Encoded),
+    [<<ELen:?len>> | Encoded].
 
 
 %% ========== Utilities ==========
 
-encode_str(Data) ->
+encode_str(Data0) ->
+    Data = unicode:characters_to_binary(Data0),
     Len = iolist_size(Data),
     [<<Len:?len>> | Data].
 
