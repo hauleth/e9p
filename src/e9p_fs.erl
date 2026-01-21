@@ -8,7 +8,7 @@
 
 -export([
          init/1,
-         root/2,
+         root/3,
          walk/3,
          open/3,
          create/5,
@@ -121,6 +121,11 @@ do_walk(_Mod, QID, [], State, Acc) ->
     {ok, {QID, lists:reverse(Acc)}, State};
 do_walk(Mod, QID0, [P | Rest], State0, Acc) ->
     case Mod:walk(QID0, P, State0) of
+        {false, State} when Acc =:= [] ->
+            % Per specification walk to first entry in name list must succeed
+            % (if any) otherwise return error. In subsequent steps we return
+            % successful list and last succeeded QID
+            {error, io_lib:format("Failed walk to ~p", [P]), State};
         {false, State} ->
             {ok, {QID0, lists:reverse(Acc)}, State};
         {QID, State} ->
