@@ -50,3 +50,10 @@ needed.
 [fuserl]: https://github.com/tonyrog/fuserl
 [libfuse]: https://github.com/libfuse/libfuse
 [NIF]: https://www.erlang.org/doc/system/nif.html#
+
+## License
+
+Apache-2.0 with exception to PropEr tests which are GPL-3.0-only. This do not
+affect possibility to run this project as dependency of non-GPL projects, as GPL
+code is not used in runtime. Unfortunately that workaround is needed due to
+PropEr licensing.
