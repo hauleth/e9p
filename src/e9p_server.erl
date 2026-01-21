@@ -40,17 +40,21 @@ accept_loop(LSock, Handler) ->
 loop(Sock, FIDs, Handler) ->
     case e9p_transport:read(Sock) of
         {ok, Tag, Data} ->
-            ?LOG_WARNING(#{msg => Data}),
-            case handle_message(Data, FIDs, Handler) of
+            ?LOG_DEBUG(#{msg => Data}),
+            try handle_message(Data, FIDs, Handler) of
                 {ok, Reply, RFIDs, RHandler} ->
                     e9p_transport:send(Sock, Tag, Reply),
                     ?MODULE:loop(Sock, RFIDs, RHandler);
                 {error, Err, RHandler} ->
                     e9p_transport:send(Sock, Tag, error_msg(Err)),
                     ?MODULE:loop(Sock, FIDs, RHandler)
+            catch
+                C:E:S ->
+                    e9p_transport:send(Sock, Tag, #rerror{msg = io_lib:format("Caught ~p: ~p", [C, E])}),
+                    erlang:raise(C, E, S)
             end;
         {error, closed} ->
-            ?LOG_WARNING("Connection closed"),
+            ?LOG_INFO("Connection closed"),
             ok
     end.
 
@@ -80,7 +84,6 @@ handle_message(#twalk{fid = FID, new_fid = NewFID, names = Paths}, FIDs, Handler
 
 handle_message(#topen{fid = FID, mode = Mode}, FIDs, Handler0) ->
     maybe
-        ?LOG_WARNING(#{fids => FIDs}),
         {ok, QID} ?= get_qid(FIDs, FID),
         {ok, {NewQID, IOUnit}, Handler} ?= e9p_fs:open(Handler0, QID, Mode),
         {ok, #ropen{qid = QID, io_unit = IOUnit}, FIDs#{FID => NewQID}, Handler}
