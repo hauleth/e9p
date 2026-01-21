@@ -28,7 +28,7 @@ Implementation of [9p2000][] file protocol in Erlang
 
 ### Example FS
 
-- [-] UnixFs - which will simply allow accessing some "real" directory in
+- [ ] UnixFs - which will simply allow accessing some "real" directory in
   system FS
 
   **WIP**: Implemented directory reading and file reading.
