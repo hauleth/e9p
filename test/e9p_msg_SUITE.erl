@@ -11,7 +11,7 @@
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("common_test/include/ct.hrl").
 
-all() -> [stat_encode_decode].
+all() -> [stat_encode_decode, rstat_encode_decode].
 
 stat_encode_decode(_Conf) ->
     Stat = #{
@@ -27,7 +27,26 @@ stat_encode_decode(_Conf) ->
                            gid => <<>>,
                            muid => <<>>
                           },
-    <<Len:?len, Out:Len/binary>> = iolist_to_binary(e9p_msg:encode_stat(Stat)),
+    Out = iolist_to_binary(e9p_msg:encode_stat(Stat)),
     Decoded = e9p_msg:parse_stat(Out),
     ?assertEqual({ok, Stat}, Decoded).
 
+rstat_encode_decode(_Conf) ->
+    Stat = #{
+                           type => 0,
+                           dev => 0,
+                           qid => e9p:make_qid(directory, 0, 0, []),
+                           mode => 0,
+                           atime => 0,
+                           mtime => 0,
+                           length => 0,
+                           name => <<>>,
+                           uid => <<>>,
+                           gid => <<>>,
+                           muid => <<>>
+                          },
+    Msg = #rstat{stat = Stat},
+    Tag = 1,
+    Out = e9p_msg:encode(Tag, Msg),
+    Decoded = e9p_msg:parse(iolist_to_binary(Out)),
+    ?assertEqual({ok, Tag, Msg}, Decoded).

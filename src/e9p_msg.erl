@@ -166,7 +166,8 @@ do_parse(?Rread, <<Count:4/?int, Data:Count/?int>>) ->
 do_parse(Type, Data) ->
     {error, {invalid_message, Type, Data}}.
 
-parse_stat(<<Type:2/?int,
+parse_stat(<<_Size:2/?int,
+             Type:2/?int,
              Dev:4/?int,
              QID:13/binary,
              Mode:4/?int,
