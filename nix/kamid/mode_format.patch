@@ -1,0 +1,18 @@
+diff --git i/kamiftp/ftp.c w/kamiftp/ftp.c
+index f776ea7..8119db0 100644
+--- i/kamiftp/ftp.c
++++ w/kamiftp/ftp.c
+@@ -1005,9 +1005,10 @@ print_dirent(const struct np_stat *st)
+ 		printf("d");
+ 	else
+ 		printf("-");
+-	printf("%s", pp_perm(st->mode >> 6));
+-	printf("%s", pp_perm(st->mode >> 3));
+-	printf("%s", pp_perm(st->mode));
++        printf("%o", st->mode);
++	// printf("%s", pp_perm(st->mode >> 6));
++	// printf("%s", pp_perm(st->mode >> 3));
++	// printf("%s", pp_perm(st->mode));
+ 	printf(" %8s %12s %s%s\n", fmt, tim, st->name,
+ 	    st->qid.type & QTDIR ? "/" : "");
+ 

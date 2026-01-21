@@ -25,7 +25,9 @@ kamid.overrideAttrs (old: {
     bison
   ];
 
-  patches = lib.optionals stdenv.isDarwin [ ./macos.patch ];
+  patches = lib.optionals stdenv.isDarwin [
+    ./macos.patch
+  ];
 
   meta.package.platforms = old.meta.package.platforms ++ [
     "aarch64-darwin"

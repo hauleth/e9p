@@ -288,7 +288,6 @@ encode_stat(Stat) ->
       gid := Gid,
       muid := MUid
      } = maps:merge(
-           Stat,
            #{
              type => 0,
              dev => 0,
@@ -298,7 +297,7 @@ encode_stat(Stat) ->
              uid => ~"",
              gid => ~"",
              muid => ~""
-            }),
+            }, Stat),
     Encoded = [<<
                  Type:2/?int,
                  Dev:4/?int
