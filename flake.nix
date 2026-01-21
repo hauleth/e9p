@@ -35,6 +35,14 @@
           languages.erlang.enable = true;
 
           packages = [ kamid ];
+
+          env.ERL_FLAGS = ''
+          -kernel logger_level debug
+          -kernel logger '[
+            {filters, log, [{no_progress, {fun logger_filters:progress/2, stop}}]}
+          ]'
+          -kernel shell_history enabled
+          '';
         };
       };
     };
