@@ -6,11 +6,14 @@
 
 -behaviour(e9p_fs).
 
-% -include_lib("kernel/include/logger.hrl").
+-include_lib("kernel/include/logger.hrl").
 -include_lib("kernel/include/file.hrl").
 
 -export([init/1, root/3, walk/3, stat/2, open/3, read/4, clunk/2]).
 
+-doc """
+Create QID for given path.
+""".
 qid(Path) ->
     case file:read_file_info(Path, [{time, posix}]) of
         {ok, #file_info{type = Type, inode = Inode}} ->
@@ -19,6 +22,9 @@ qid(Path) ->
         {error, _} = Error -> Error
     end.
 
+-doc """
+Create QID and Stat data for given path.
+""".
 qid_stat(Root, Path) ->
     case file:read_file_info(Path, [{time, posix}]) of
         {ok, #file_info{type = Type, inode = Inode} = FI} ->
@@ -29,14 +35,23 @@ qid_stat(Root, Path) ->
     end.
 
 init(#{path := Path}) ->
-    {ok, #{root => Path}}.
+    {ok, #{root => unicode:characters_to_binary(Path)}}.
 
-root(_UName, _AName, #{root := Root} = State) ->
+root(UName, AName, #{root := Root} = State) ->
+    ?LOG_INFO(#{uname => UName, aname => AName}),
     maybe
         {ok, Qid} ?= qid(Root),
         {ok, Qid, State}
     end.
 
+walk(#{state := {Root, _}}, ~"..", #{root := Root} = State) ->
+    {false, State};
+walk(#{state := {Path, _}}, ~"..", State) ->
+    Next = filename:dirname(Path),
+    case qid(Next) of
+        {ok, NQid} -> {NQid, State};
+        {error, _} -> {false, State}
+    end;
 walk(#{state := {Path, _}}, File, State) ->
     Next = filename:join(Path, File),
     case qid(Next) of
