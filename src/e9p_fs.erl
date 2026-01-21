@@ -48,7 +48,7 @@
 %% If implementation provides multiple trees then the `AName' will be set to the
 %% tree defined by the client. It is left to the implementation to ensure the
 %% constraints of the file root (aka `walk(Root, "..", State0) =:= {Root, State1}'.
--callback root(AName :: unicode:chardata(), state()) -> {ok, e9p:qid(), state()}.
+-callback root(UName :: unicode:chardata(), AName :: unicode:chardata(), state()) -> {ok, e9p:qid(), state()}.
 
 -callback flush(state()) -> {ok, state()} | {error, term(), state()}.
 
@@ -105,8 +105,8 @@ init({Mod, State}) ->
         Error -> Error
     end.
 
-root({Mod, State}, AName) ->
-    case Mod:root(AName, State) of
+root({Mod, State}, UName, AName) ->
+    case Mod:root(UName, AName, State) of
         {ok, QID, NewState} ->
             {ok, QID, {Mod, NewState}}
     end.

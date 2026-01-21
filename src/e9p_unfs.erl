@@ -9,7 +9,7 @@
 % -include_lib("kernel/include/logger.hrl").
 -include_lib("kernel/include/file.hrl").
 
--export([init/1, root/2, walk/3, stat/2, open/3, read/4, clunk/2]).
+-export([init/1, root/3, walk/3, stat/2, open/3, read/4, clunk/2]).
 
 qid(Path) ->
     case file:read_file_info(Path, [{time, posix}]) of
@@ -31,7 +31,7 @@ qid_stat(Root, Path) ->
 init(#{path := Path}) ->
     {ok, #{root => Path}}.
 
-root(_AName, #{root := Root} = State) ->
+root(_UName, _AName, #{root := Root} = State) ->
     maybe
         {ok, Qid} ?= qid(Root),
         {ok, Qid, State}

@@ -64,9 +64,9 @@ handle_message(#tflush{}, FIDs, Handler) ->
     % nothing
     {ok, #rflush{}, FIDs, Handler};
 
-handle_message(#tattach{fid = FID, uname = _UName, aname = AName}, FIDs, Handler0) ->
+handle_message(#tattach{fid = FID, uname = UName, aname = AName}, FIDs, Handler0) ->
     maybe
-        {ok, QID, Handler} ?= e9p_fs:root(Handler0, AName),
+        {ok, QID, Handler} ?= e9p_fs:root(Handler0, UName, AName),
         NFIDs = FIDs#{FID => QID},
         {ok, #rattach{qid = QID}, NFIDs, Handler}
     end;
