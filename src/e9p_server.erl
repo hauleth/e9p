@@ -11,25 +11,45 @@
 -export([start_link/2,
          setup_acceptor/3,
          accept_loop/2,
-         loop/3
+         loop/1
         ]).
+
+-record(state, {
+          socket,
+          % trans_mod = gen_tcp,
+          % ver,
+          fids = #{},
+          handler
+         }).
+
+-record(fid, {qid, path, state}).
 
 start_link(Port, Handler) ->
     proc_lib:start_link(?MODULE, setup_acceptor, [self(), Port, Handler]).
 
 setup_acceptor(Parent, Port, Handler0) ->
-    {ok, LSock} = gen_tcp:listen(Port, [binary, {active, false}]),
-    {ok, Handler} = e9p_fs:init(Handler0),
+    maybe
+        {ok, LSock} ?= gen_tcp:listen(Port, [binary, {active, false}]),
+        {ok, Handler} ?= e9p_fs:init(Handler0),
 
-    proc_lib:init_ack(Parent, {ok, self()}),
+        proc_lib:init_ack(Parent, {ok, self()}),
 
-    ?MODULE:accept_loop(LSock, Handler).
+        ?MODULE:accept_loop(LSock, Handler)
+    else
+        {error, _} = Error ->
+            proc_lib:init_fail(Parent, Error)
+    end.
 
 accept_loop(LSock, Handler) ->
     case gen_tcp:accept(LSock, 5000) of
         {ok, Sock} ->
             % TODO: Handle connected clients in separate process
-            ok = ?MODULE:loop(Sock, #{}, Handler),
+
+            State = #state{
+                        socket = Sock,
+                        handler = Handler
+                       },
+            ok = ?MODULE:loop(State),
             ?MODULE:accept_loop(LSock, Handler);
         {error, timeout} ->
             ?MODULE:accept_loop(LSock, Handler);
@@ -37,17 +57,17 @@ accept_loop(LSock, Handler) ->
             ok
     end.
 
-loop(Sock, FIDs, Handler) ->
+loop(#state{socket = Sock} = State) ->
     case e9p_transport:read(Sock) of
         {ok, Tag, Data} ->
             ?LOG_DEBUG(#{msg => Data}),
-            try handle_message(Data, FIDs, Handler) of
-                {ok, Reply, RFIDs, RHandler} ->
+            try handle_message(Data, State#state.fids, State#state.handler) of
+                {ok, Reply, FIDs, Handler} ->
                     e9p_transport:send(Sock, Tag, Reply),
-                    ?MODULE:loop(Sock, RFIDs, RHandler);
+                    ?MODULE:loop(State#state{fids = FIDs, handler = Handler});
                 {error, Err, RHandler} ->
-                    e9p_transport:send(Sock, Tag, error_msg(Err)),
-                    ?MODULE:loop(Sock, FIDs, RHandler)
+                    e9p_transport:send(Sock, Tag, #rerror{msg = Err}),
+                    ?MODULE:loop(State#state{handler = RHandler})
             catch
                 C:E:S ->
                     e9p_transport:send(Sock, Tag, #rerror{msg = io_lib:format("Caught ~p: ~p", [C, E])}),
@@ -145,6 +165,3 @@ get_qid(FIDs, FID) ->
         #{FID := QID} -> {ok, QID};
         _ -> {error, io_lib:fwrite(~"Unknown FID: ~B", [FID])}
     end.
-
-error_msg(Data) ->
-    #rerror{msg = io_lib:fwrite(~"~p", [Data])}.
