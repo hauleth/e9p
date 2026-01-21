@@ -272,21 +272,33 @@ do_encode(#tread{fid = FID, offset = Offset, len = Len}) ->
     {?Tread, <<FID:4/?int, Offset:8/?int, Len:4/?int>>};
 do_encode(#rread{data = Data}) ->
     Len = iolist_size(Data),
-    {?Rread, [<<Len:4/?int>>, Data]}.
+    {?Rread, [<<Len:4/?int>> | Data]}.
 
-encode_stat(#{
-           type := Type,
-           dev := Dev,
-           qid := QID,
-           mode := Mode,
-           atime := Atime,
-           mtime := Mtime,
-           length := Len,
-           name := Name,
-           uid := Uid,
-           gid := Gid,
-           muid := MUid
-          }) ->
+encode_stat(Stat) ->
+    #{
+      type := Type,
+      dev := Dev,
+      qid := QID,
+      mode := Mode,
+      atime := Atime,
+      mtime := Mtime,
+      length := Len,
+      name := Name,
+      uid := Uid,
+      gid := Gid,
+      muid := MUid
+     } = maps:merge(
+           Stat,
+           #{
+             type => 0,
+             dev => 0,
+             mode => 0,
+             atime => 0,
+             mtime => 0,
+             uid => ~"",
+             gid => ~"",
+             muid => ~""
+            }),
     Encoded = [<<
                  Type:2/?int,
                  Dev:4/?int
@@ -309,8 +321,9 @@ encode_stat(#{
 
 encode_str(Data0) ->
     Data = unicode:characters_to_binary(Data0),
+    true = is_binary(Data),
     Len = iolist_size(Data),
-    [<<Len:?len>> | Data].
+    [<<Len:?len>>, Data].
 
 binary_to_qid(<<Type:1/?int, Version:4/?int, Path:8/?int>>) ->
     #{type => Type, version => Version, path => Path, state => []}.

@@ -106,15 +106,10 @@ file_info_to_stat(
                true -> filename:basename(Path)
            end,
     #{
-      type => 0,
-      dev => 0,
       qid => QID,
       mode => Mode,
       atime => Atime,
       mtime => Mtime,
       length => Len,
-      name => Name,
-      uid => ~"",
-      gid => ~"",
-      muid => ~""
+      name => Name
      }.
