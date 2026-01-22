@@ -20,9 +20,15 @@
          wstat/3
         ]).
 
--export_type([state/0]).
+-include("e9p_internal.hrl").
+-include_lib("kernel/include/logger.hrl").
+
+-export_type([state/0, fid/0, path/0, result/0, result/1]).
 
 -type state() :: term().
+-type fid() :: {QID :: e9p:qid(), State :: fid_state()}.
+-type path() :: [unicode:chardata()].
+-type fid_state() :: term().
 -type result() :: {ok, state()} | {error, term(), state()}.
 -type result(T) :: {ok, T, state()} | {error, term(), state()}.
 
@@ -48,55 +54,51 @@
 %% If implementation provides multiple trees then the `AName' will be set to the
 %% tree defined by the client. It is left to the implementation to ensure the
 %% constraints of the file root (aka `walk(Root, "..", State0) =:= {Root, State1}'.
--callback root(UName :: unicode:chardata(), AName :: unicode:chardata(), state()) -> {ok, e9p:qid(), state()}.
+-callback root(UName :: unicode:chardata(), AName :: unicode:chardata(), state()) ->
+    {ok, fid_state(), state()}.
 
--callback flush(state()) -> {ok, state()} | {error, term(), state()}.
+-callback flush(state()) -> result().
 
 %% Walk through the given path starting at the `QID'
--callback walk(QID :: e9p:qid(), unicode:chardata(), state()) ->
-    {e9p:qid() | false, state()}.
+-callback walk(fid(), File :: unicode:chardata(), unicode:chardata(), state()) ->
+    {fid() | false, state()}.
 
--callback open(QID :: e9p:qid(), Mode :: integer(), state()) -> result({e9p:qid(), e9p:u32()}).
+-callback open(fid(), path(), Mode :: integer(), state()) -> result({fid_state(), e9p:u32()}).
 
--callback create(QID :: e9p:qid(),
+-callback create(fid(),
+                 path(),
                  Name :: unicode:chardata(),
                  Perm :: e9p:u32(),
                  Mode :: e9p:u8(),
-                 state()) -> result({e9p:qid(), e9p:u32()}).
+                 state()) -> result({fid(), IOUnit :: e9p:u32()}).
 
 %% Read data from file indicated by `QID'
--callback read(QID :: e9p:qid(),
+-callback read(fid(),
+               path(),
                Offset :: non_neg_integer(),
                Length :: non_neg_integer(),
-               state()) -> result({e9p:qid(), iodata()}).
+               state()) -> result({fid_state(), iodata()}).
 
 %% Write data to file indicated by `QID'
--callback write(QID :: e9p:qid(),
+-callback write(fid(),
+                path(),
                 Offset :: non_neg_integer(),
                 Data :: iodata(),
-                state()) -> result({e9p:qid(), non_neg_integer()}).
+                state()) -> result({fid_state(), non_neg_integer()}).
 
--callback clunk(QID :: e9p:qid(), state()) -> result().
+-callback clunk(fid(), path(), state()) -> result().
 
--callback remove(QID :: e9p:qid(), state()) -> result().
+-callback remove(fid(), path(), state()) -> result().
 
 %% Return stat data for file indicated by `QID'
--callback stat(QID :: e9p:qid(), state()) -> result(map()).
+-callback stat(fid(), path(), state()) -> result(map()).
 
 %% Write stat data for file indicated by `QID'
--callback wstat(QID :: e9p:qid(), map(), state()) -> result().
+-callback wstat(fid(), path(), map(), state()) -> result().
 
 -optional_callbacks([
                      flush/1,
-                     walk/3,
-                     open/3,
-                     create/5,
-                     read/4,
-                     write/4,
-                     clunk/2,
-                     remove/2,
-                     stat/2,
-                     wstat/3
+                     clunk/3
                     ]).
 
 init({Mod, State}) ->
@@ -107,61 +109,94 @@ init({Mod, State}) ->
 
 root({Mod, State}, UName, AName) ->
     case Mod:root(UName, AName, State) of
-        {ok, QID, NewState} ->
-            {ok, QID, {Mod, NewState}}
+        {ok, {QID, FState}, NewState} ->
+            {ok, #fid{qid = QID, path = [], state = FState}, {Mod, NewState}}
     end.
 
 -doc """
 Walk through paths starting at QID.
 """.
-walk({Mod, State}, QID, Paths) when is_atom(Mod) ->
-    ?if_supported(do_walk(Mod, QID, Paths, State, [])).
-
-do_walk(_Mod, QID, [], State, Acc) ->
-    {ok, {QID, lists:reverse(Acc)}, State};
-do_walk(Mod, QID0, [P | Rest], State0, Acc) ->
-    case Mod:walk(QID0, P, State0) of
-        {false, State} when Acc =:= [] ->
-            % Per specification walk to first entry in name list must succeed
-            % (if any) otherwise return error. In subsequent steps we return
-            % successful list and last succeeded QID
-            {error, io_lib:format("Failed walk to ~p", [P]), State};
-        {false, State} ->
-            {ok, {QID0, lists:reverse(Acc)}, State};
-        {QID, State} ->
-            do_walk(Mod, QID, Rest, State, [QID | Acc])
+walk({Mod, State0}, FID0, Paths) when is_atom(Mod) ->
+    case do_walk(Mod, FID0, Paths, State0, []) of
+        {ok, {FID, QIDs}, State} -> {ok, {FID, QIDs}, {Mod, State}};
+        {error, Reason, State} -> {error, Reason, {Mod, State}}
     end.
 
-open({Mod, State}, QID, Mode) ->
-    ?if_supported(Mod:open(QID, Mode, State)).
+do_walk(_Mod, FID, [], State, Acc) ->
+    {ok, {FID, lists:reverse(Acc)}, State};
+do_walk(Mod, #fid{qid = QID0, path = Path, state = FState0} = FID0, [P | Rest], State0, Acc) ->
+    case e9p:is_type(QID0, directory) of
+        true ->
+            case Mod:walk({QID0, FState0}, Path, P, State0) of
+                {false, State} when Acc =:= [] ->
+                    % Per specification walk to first entry in name list must succeed
+                    % (if any) otherwise return error. In subsequent steps we return
+                    % successful list and last succeeded QID
+                    {error, io_lib:format("Failed walk to ~p", [P]), State};
+                {false, State} ->
+                    {ok, {FID0, lists:reverse(Acc)}, State};
+                {{QID, FState}, State} ->
+                    FID = #fid{qid = QID, state = FState, path = Path ++ [P]},
+                    do_walk(Mod, FID, Rest, State, [QID | Acc])
+            end;
+        false ->
+            {error, io_lib:format("Not directory ~p", [Path]), State0}
+    end.
 
-create({Mod, State}, QID, Name, Perm, Mode) ->
-    ?if_supported(Mod:create(QID, Name, Perm, Mode, State)).
+open({Mod, State0}, #fid{qid = QID, path = Path, state = FState0} = FID, Mode) ->
+    EMode = translate_mode(Mode),
+    case Mod:open({QID, FState0}, Path, EMode, State0) of
+        {ok, {FState, IOUnit}, State} ->
+            {ok, {FID#fid{state = FState}, IOUnit}, {Mod, State}};
+        {error, Reason, StateE} -> {error, Reason, {Mod, StateE}}
+    end.
 
-read({Mod, State}, QID, Offset, Length) ->
-    ?if_supported(Mod:read(QID, Offset, Length, State)).
+translate_mode(Mode) when Mode >= 16#10 ->
+    [trunc | translate_mode(Mode band 16#EF)];
+translate_mode(0) -> [read];
+translate_mode(1) -> [write];
+translate_mode(2) -> [append];
+translate_mode(3) -> [exec].
 
-write({Mod, State}, QID, Offset, Data) ->
-    ?if_supported(Mod:write(QID, Offset, Data, State)).
+create({Mod, State}, #fid{qid = QID, path = Path, state = FState}, Name, Perm, Mode) ->
+    ?if_supported(Mod:create({QID, FState}, Path, Name, Perm, Mode, State)).
 
-clunk({Mod, State0}, QID) ->
+read({Mod, State0}, #fid{qid = QID, path = Path, state = FState0} = FID, Offset, Length) ->
+    case Mod:read({QID, FState0}, Path, Offset, Length, State0) of
+        {ok, {FState, Data}, State} -> {ok, {FID#fid{state = FState}, Data}, {Mod, State}};
+        {error, Reason, StateE} -> {error, Reason, {Mod, StateE}}
+    end.
+
+write({Mod, State0}, #fid{qid = QID, path = Path, state = FState0} = FID, Offset, Data) ->
+    case Mod:write({QID, FState0}, Path, Offset, Data, State0) of
+        {ok, {FState, Len}, State} -> {ok, {FID#fid{state = FState}, Len}, {Mod, State}};
+        {error, Reason, StateE} -> {error, Reason, {Mod, StateE}}
+    end.
+
+clunk({Mod, State0}, #fid{qid = QID, path = Path, state = FState}) ->
     case erlang:function_exported(Mod, clunk, 3) of
         true ->
-            maybe
-                {ok, State} ?= Mod:clunk(QID, State0),
-                {ok, {Mod, State}}
-            else
-                {error, Reason, StateE} ->
-                    {error, Reason, {Mod, StateE}}
+            case Mod:clunk({QID, FState}, Path, State0) of
+                {ok, State} -> {ok, {Mod, State}};
+                {error, Reason, StateE} -> {error, Reason, {Mod, StateE}}
             end;
         false -> {ok, {Mod, State0}}
     end.
 
-remove({Mod, State}, QID) ->
-    ?if_supported(Mod:remove(QID, State)).
+remove({Mod, State0}, #fid{qid = QID, path = Path, state = FState}) ->
+    case Mod:remove({QID, FState}, Path, State0) of
+        {ok, State} -> {ok, {Mod, State}};
+        {error, Reason, State} -> {error, Reason, {Mod, State}}
+    end.
 
-stat({Mod, State}, QID) ->
-    ?if_supported(Mod:stat(QID, State)).
+stat({Mod, State0}, #fid{qid = QID, path = Path, state = FState0}) ->
+    case Mod:stat({QID, FState0}, Path, State0) of
+        {ok, Stat, State} -> {ok, Stat, {Mod, State}};
+        {error, Reason, StateE} -> {error, Reason, {Mod, StateE}}
+    end.
 
-wstat({Mod, State}, QID, Stat) ->
-    ?if_supported(Mod:wstat(QID, Stat, State)).
+wstat({Mod, State0}, #fid{qid = QID, path = Path, state = FState}, Stat) ->
+    case Mod:wstat({QID, FState}, Path, Stat, State0) of
+        {ok, State} -> {ok, {Mod, State}};
+        {error, Reason, State} -> {error, Reason, {Mod, State}}
+    end.

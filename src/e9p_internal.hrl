@@ -53,6 +53,9 @@
 -define(Twstat, 126).
 -define(Rwstat, 127).
 
+-record(qid, {type, version, path}).
+-record(fid, {qid, path, state}).
+
 -record(tversion, {max_packet_size, version}).
 -record(rversion, {max_packet_size, version}).
 

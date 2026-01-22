@@ -9,28 +9,19 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("kernel/include/file.hrl").
 
--export([init/1, root/3, walk/3, stat/2, open/3, read/4, clunk/2]).
-
--doc """
-Create QID for given path.
-""".
-qid(Path) ->
-    case file:read_file_info(Path, [{time, posix}]) of
-        {ok, #file_info{type = Type, inode = Inode}} ->
-            NQid = e9p:make_qid(Type, 0, Inode, {Path, []}),
-            {ok, NQid};
-        {error, _} = Error -> Error
-    end.
+-export([init/1, root/3, walk/4, stat/3, open/4, read/5, clunk/2, create/6,
+         write/5, remove/3, wstat/4]).
 
 -doc """
 Create QID and Stat data for given path.
 """.
-qid_stat(Root, Path) ->
-    case file:read_file_info(Path, [{time, posix}]) of
+qid(Root, Path) ->
+    FullPath = filename:join([Root] ++ Path),
+    case file:read_file_info(FullPath, [{time, posix}]) of
         {ok, #file_info{type = Type, inode = Inode} = FI} ->
-            NQid = e9p:make_qid(Type, 0, Inode, {Path, []}),
-            Stat = file_info_to_stat(Root, NQid, FI),
-            {ok, NQid, Stat};
+            QID = e9p:make_qid(Type, 0, Inode),
+            Stat = file_info_to_stat(Path, QID, FI),
+            {ok, QID, Stat};
         {error, _} = Error -> Error
     end.
 
@@ -40,60 +31,84 @@ init(#{path := Path}) ->
 root(UName, AName, #{root := Root} = State) ->
     ?LOG_INFO(#{uname => UName, aname => AName}),
     maybe
-        {ok, Qid} ?= qid(Root),
-        {ok, Qid, State}
+        {ok, Qid, _Stat} ?= qid(Root, []),
+        {ok, {Qid, []}, State}
     end.
 
-walk(#{state := {Root, _}}, ~"..", #{root := Root} = State) ->
+walk(_QID, [], ~"..", State) ->
     {false, State};
-walk(#{state := {Path, _}}, ~"..", State) ->
-    Next = filename:dirname(Path),
-    case qid(Next) of
-        {ok, NQid} -> {NQid, State};
+walk(_QID, Path, ~"..", #{root := Root} = State) ->
+    case qid(Root, lists:droplast(Path)) of
+        {ok, NQid, _Stat} -> {{NQid, []}, State};
         {error, _} -> {false, State}
     end;
-walk(#{state := {Path, _}}, File, State) ->
-    Next = filename:join(Path, File),
-    case qid(Next) of
-        {ok, NQid} -> {NQid, State};
+walk(_QID, Path, File, #{root := Root} = State) ->
+    case qid(Root, Path ++ [File]) of
+        {ok, NQid, _Stat} -> {{NQid, []}, State};
         {error, _} -> {false, State}
     end.
 
-stat(#{state := {Path, _}} = QID, #{root := Root} = State) ->
-    case file:read_file_info(Path, [{time, posix}]) of
+stat({QID, _}, Path, #{root := Root} = State) ->
+    FullPath = filename:join([Root] ++ Path),
+    case file:read_file_info(FullPath, [{time, posix}]) of
         {ok, FileInfo} ->
-            Stat = file_info_to_stat(Root, QID, FileInfo),
+            Stat = file_info_to_stat(Path, QID, FileInfo),
             {ok, Stat, State};
         {error, Error} ->
             {error, Error, State}
     end.
 
-open(#{state := {Path, []}} = QID, _Mode, State) ->
+open({QID, []}, Path, Mode, #{root := Root} = State) ->
+    FullPath = filename:join([Root] ++ Path),
     QS = case e9p:is_type(QID, directory) of
              true ->
-                 {ok, List} = file:list_dir(Path),
+                 {ok, List} = file:list_dir(FullPath),
                  {dir, List};
              false ->
-                 {ok, FD} = file:open(Path, [raw, read, binary]),
+                 {Trunc, Opts} = translate_mode(Mode),
+                 {ok, FD} = file:open(FullPath, [raw, binary | Opts]),
+                 if Trunc -> file:truncate(FD); true -> ok end,
                  {regular, FD}
          end,
-    NQID = QID#{state => {Path, QS}},
-    {ok, {NQID, 0}, State}.
+    {ok, {QS, 0}, State}.
 
-read(#{state := {_, {regular, FD}}} = QID, Offset, Len, State) ->
+create(_QID, _Path, _Name, _Perm, _Mode, State) ->
+    {error, "Unsupported", State}.
+
+remove({QID, _} = FID, Path, #{root := Root} = State0) ->
+    FullPath = filename:join([Root] ++ Path),
+    {ok, State} = clunk(FID, State0),
+    case case e9p:is_type(QID, directory) of
+             true -> file:del_dir(FullPath);
+             false -> file:delete(FullPath)
+         end of
+        ok -> {ok, State};
+        {error, Reason} ->
+            {error, io_lib:format("Failed to remove path: ~p", [Reason]), State}
+    end.
+
+translate_mode([trunc | Rest]) ->
+    {_, Mode} = translate_mode(Rest),
+    {true, Mode};
+translate_mode([read]) -> {false, [read]};
+translate_mode([write]) -> {false, [read, write]};
+translate_mode([append]) -> {false, [read, write]};
+translate_mode([exec]) -> {false, [read]}.
+
+read({_QID, {regular, FD}}, _Path, Offset, Len, State) ->
     case file:pread(FD, Offset, Len) of
-        {ok, Data} -> {ok, {QID, Data}, State};
-        eof -> {ok, {QID, []}, State};
+        {ok, Data} -> {ok, {{regular, FD}, Data}, State};
+        eof -> {ok, {{regular, FD}, []}, State};
         {error, Err} -> {error, Err, State}
     end;
-read(#{state := {Path, {dir, List}}} = QID, _Offset, Len, #{root := Root} = State) ->
+read({_QID, {dir, List}}, Path, _Offset, Len, #{root := Root} = State) ->
     {Remaining, Data} = readdir(Root, Path, List, Len, []),
-    {ok, {QID#{state => {Path, {dir, Remaining}}}, Data}, State}.
+    {ok, {{dir, Remaining}, Data}, State}.
 
 readdir(_Root, _Path, List, 0, Acc) -> {List, Acc};
 readdir(_Root, _Path, [], _Len, Acc) -> {[], Acc};
 readdir(Root, Path, [Next | Rest], Len, Acc) ->
-    {ok, _QID, Stat} = qid_stat(Root, filename:join(Path, Next)),
+    {ok, _QID, Stat} = qid(Root, Path ++ [Next]),
     Encoded = e9p_msg:encode_stat(Stat),
     Size = iolist_size(Encoded),
     if
@@ -101,15 +116,32 @@ readdir(Root, Path, [Next | Rest], Len, Acc) ->
         true -> readdir(Root, Path, Rest, Len - Size, [Encoded | Acc])
     end.
 
-clunk(#{state := {_Path, {refular, FD}}}, State) ->
+write({_QID, {regular, FD}}, _Path, Offset, Data, State) ->
+    case file:pwrite(FD, Offset, Data) of
+        ok -> {ok, {{regular, FD}, iolist_size(Data)}, State};
+        {error, Err} -> {error, io_lib:format("Write error ~p", [Err]), State}
+    end.
+
+clunk({_, {regular, FD}}, State) ->
     ok = file:close(FD),
     {ok, State};
 clunk(_QID, State) ->
     {ok, State}.
 
+wstat(_QID, Path, Stat, #{root := Root} = State) ->
+    FileInfo = stat_to_file_info(Stat),
+    FullPath = filename:join([Root] ++ Path),
+
+    case file:write_file_info(FullPath, FileInfo, [{time, posix}]) of
+        ok -> {ok, State};
+        {error, Reason} ->
+            {error, io_lib:format("Couldn't write file stat: ~p", [Reason]),
+             State}
+    end.
+
 file_info_to_stat(
-  Root,
-  #{state := {Path, _}} = QID,
+  Path,
+  QID,
   #file_info{
      size = Len,
      atime = Atime,
@@ -117,8 +149,8 @@ file_info_to_stat(
      mode = Mode
     }) ->
     Name = if
-               Root == Path -> ~"/";
-               true -> filename:basename(Path)
+               Path == [] -> ~"/";
+               true -> lists:last(Path)
            end,
     #{
       qid => QID,
@@ -128,3 +160,15 @@ file_info_to_stat(
       length => Len,
       name => Name
      }.
+
+stat_to_file_info(Stat) ->
+    #{
+      mode := Mode,
+      atime := Atime,
+      mtime := Mtime
+     } = Stat,
+    #file_info{
+       mode = Mode,
+       atime = Atime,
+       mtime = Mtime
+      }.

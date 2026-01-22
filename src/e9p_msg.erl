@@ -162,6 +162,10 @@ do_parse(?Tread, <<FID:4/?int, Offset:8/?int, Len:4/?int>>) ->
     {ok, #tread{fid = FID, offset = Offset, len = Len}};
 do_parse(?Rread, <<Count:4/?int, Data:Count/?int>>) ->
     {ok, #rread{data = Data}};
+do_parse(?Twrite, <<FID:4/?int, Offset:8/?int, Len:4/?int, Data:Len/binary>>) ->
+    {ok, #twrite{fid = FID, offset = Offset, data = Data}};
+do_parse(?Rwrite, <<Len:4/?int>>) ->
+    {ok, #rwrite{len = Len}};
 
 do_parse(Type, Data) ->
     {error, {invalid_message, Type, Data}}.
@@ -273,7 +277,12 @@ do_encode(#tread{fid = FID, offset = Offset, len = Len}) ->
     {?Tread, <<FID:4/?int, Offset:8/?int, Len:4/?int>>};
 do_encode(#rread{data = Data}) ->
     Len = iolist_size(Data),
-    {?Rread, [<<Len:4/?int>> | Data]}.
+    {?Rread, [<<Len:4/?int>> | Data]};
+do_encode(#twrite{fid = FID, offset = Offset, data = Data}) ->
+    Len = iolist_size(Data),
+    {?Twrite, [<<FID:4/?int, Offset:8/?int, Len:4/?int>>, Data]};
+do_encode(#rwrite{len = Len}) ->
+    {?Rwrite, [<<Len:4/?int>>]}.
 
 encode_stat(Stat) ->
     #{
@@ -326,9 +335,9 @@ encode_str(Data0) ->
     [<<Len:?len>>, Data].
 
 binary_to_qid(<<Type:1/?int, Version:4/?int, Path:8/?int>>) ->
-    #{type => Type, version => Version, path => Path, state => []}.
+    #qid{type = Type, version = Version, path = Path}.
 
-qid_to_binary(#{type := Type, version := Version, path := Path}) ->
+qid_to_binary(#qid{type = Type, version = Version, path = Path}) ->
     <<Type:1/?int, Version:4/?int, Path:8/?int>>.
 
 time_to_encoded_sec(Sec) when is_integer(Sec) -> <<Sec:4/?int>>;
