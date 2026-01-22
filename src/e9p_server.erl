@@ -58,6 +58,7 @@ accept_loop(LSock, Handler) ->
 loop(#state{socket = Sock} = State) ->
     case e9p_transport:read(Sock) of
         {ok, Tag, Data} ->
+            ?LOG_DEBUG(#{message => Data, tag => Tag}),
             try handle_message(Data, State#state.fids, State#state.handler) of
                 {ok, Reply, FIDs, Handler} ->
                     e9p_transport:send(Sock, Tag, Reply),
@@ -67,8 +68,13 @@ loop(#state{socket = Sock} = State) ->
                     ?MODULE:loop(State#state{handler = RHandler})
             catch
                 C:E:S ->
+                    ?LOG_ERROR(#{
+                                 kind => C,
+                                 msg => E,
+                                 stacktrace => S
+                                }),
                     e9p_transport:send(Sock, Tag, #rerror{msg = io_lib:format("Caught ~p: ~p", [C, E])}),
-                    erlang:raise(C, E, S)
+                    ?MODULE:loop(State)
             end;
         {error, closed} ->
             ?LOG_INFO("Connection closed"),

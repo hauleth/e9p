@@ -124,6 +124,8 @@ walk({Mod, State0}, FID0, Paths) when is_atom(Mod) ->
 
 do_walk(_Mod, FID, [], State, Acc) ->
     {ok, {FID, lists:reverse(Acc)}, State};
+do_walk(_Mod, #fid{path = []}, [~".." | _Names], State, _Acc) ->
+    {error, "Cannot walt to root parent of root directory", State};
 do_walk(Mod, #fid{qid = QID0, path = Path, state = FState0} = FID0, [P | Rest], State0, Acc) ->
     case e9p:is_type(QID0, directory) of
         true ->
