@@ -2,17 +2,19 @@
 %
 % SPDX-License-Identifier: Apache-2.0
 {application, e9p,
- [{description, "An OTP library"},
-  {vsn, "0.1.0"},
+ [{description, "Implementation of 9p2000 protocol in Erlang"},
+  {vsn, git},
   {registered, []},
   {applications,
    [kernel,
-    stdlib,
-    ranch
+    stdlib
    ]},
   {env,[]},
   {modules, []},
 
   {licenses, ["Apache-2.0"]},
-  {links, []}
+  {links, [
+           {"Tangled", "https://tangled.org/hauleth.dev/e9p"},
+           {"intro(5)", "https://man.cat-v.org/plan_9/5/intro"}
+          ]}
  ]}.

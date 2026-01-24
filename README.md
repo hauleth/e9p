@@ -12,7 +12,7 @@ Implementation of [9p2000][] file protocol in Erlang
 
 - [x] Message parsing
 - [ ] Client implementation
-    + [x] Establishing connection
+    + [ ] Establishing connection
     + [ ] Tree walking
     + [ ] IO server implementation for reading/writing files
     + [ ] File/directory creation
@@ -21,19 +21,18 @@ Implementation of [9p2000][] file protocol in Erlang
 - [ ] Server implementation
     + [x] Establishing connection
     + [x] Tree walking
-    + [ ] File/directory creation
-    + [ ] File/directory deletion
+    + [x] File/directory creation
+    + [x] File/directory deletion
     + [x] File stats
-    + [ ] Customisable FS implementations
+    + [x] Customisable FS implementations
 
 ### Example FS
 
-- [ ] UnixFs - which will simply allow accessing some "real" directory in
-  system FS
-
-  **WIP**: Implemented directory reading and file reading.
-- [ ] ErlProcFS - which will expose Erlang process tree and other internal data
-  via API similar to `procfs` from Linux
+- [x] UnixFs - which will simply allow accessing some "real" directory in
+  system FS. **WIP**: Implemented directory traversal, file
+  writing/reading/deletion, but so far no file nor directory creation.
+- [x] ErlProcFS - which will expose Erlang process tree and other internal data
+  via API similar to `procfs` from Linux. Read-only for the time of being.
 
 ## Reasoning
 
