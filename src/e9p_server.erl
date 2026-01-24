@@ -8,8 +8,10 @@
 
 -include_lib("kernel/include/logger.hrl").
 
--export([start_link/2,
-         setup_acceptor/3,
+-export([start/2,
+         start_link/2]).
+
+-export([setup_acceptor/3,
          accept_loop/2,
          loop/1
         ]).
@@ -21,6 +23,9 @@
           fids = #{},
           handler
          }).
+
+start(Port, Handler) ->
+    proc_lib:start(?MODULE, setup_acceptor, [self(), Port, Handler]).
 
 start_link(Port, Handler) ->
     proc_lib:start_link(?MODULE, setup_acceptor, [self(), Port, Handler]).
