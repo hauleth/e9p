@@ -39,7 +39,7 @@ open(_FID, [~"system_info"], _Mode, State) ->
             ~"alloc_util_allocators",
             % ~"allocator_sizes", %% TBD
             ~"cpu_topology",
-            ~"logocal_processors",
+            ~"logical_processors",
             ~"logical_processors_available",
             ~"logical_processors_online",
             ~"cpu_quota",
@@ -48,7 +48,7 @@ open(_FID, [~"system_info"], _Mode, State) ->
             ~"garbage_collection",
             ~"heap_sizes",
             ~"heap_type",
-            ~"max_heap_type",
+            ~"max_heap_size",
             ~"message_queue_data",
             ~"min_heap_size",
             ~"min_bin_vheap_size",
@@ -63,16 +63,15 @@ open(_FID, [~"system_info"], _Mode, State) ->
             ~"process_limit",
             ~"end_time",
             ~"os_monotonic_time_source",
-            ~"os_time_source",
+            ~"os_system_time_source",
             ~"start_time",
-            ~"time_correlation",
+            ~"time_correction",
             ~"time_offset",
             ~"time_warp_mode",
             ~"tolerant_timeofday",
             ~"dirty_cpu_schedulers",
             ~"dirty_cpu_schedulers_online",
             ~"dirty_io_schedulers",
-            ~"dirty_io_schedulers_online",
             ~"multi_scheduling",
             ~"multi_scheduling_blockers",
             ~"normal_multi_scheduling_blockers",
@@ -125,8 +124,10 @@ open(_FID, [~"system_info", ~"wordsize", TypeB], _Mode, State) ->
     {ok, {Data, 0}, State};
 open(_FID, [~"system_info", KeyB], _Mode, State) ->
     Key = binary_to_atom(KeyB),
-    Val = erlang:system_info(Key),
-    Data = iolist_to_binary(io_lib:format("~p", [Val])),
+    Data = case erlang:system_info(Key) of
+               Val when is_binary(Val) -> Val;
+               Val -> iolist_to_binary(io_lib:format("~p", [Val]))
+           end,
     {ok, {Data, 0}, State};
 %% ===== Processes =====
 open(_FID, [~"processes"], _Mode, State) ->
