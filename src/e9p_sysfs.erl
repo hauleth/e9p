@@ -186,7 +186,7 @@ open(_FID, [~"applications", Name], _Mode, State) ->
 open(_FID, [~"applications", Name, ~"env"], _Mode, State) ->
     Atom = binary_to_existing_atom(Name),
     AllEnv = application:get_all_env(Atom),
-    Data = iolist_to_binary(io_lib:format("~p", [AllEnv])),
+    Data = iolist_to_binary(io_lib:format("%% coding: utf-8~n~n~p.", [AllEnv])),
     {ok, {Data, 0}, State};
 open(_FID, [~"applications", NameB, KeyB], _Mode, State) ->
     Name = binary_to_existing_atom(NameB),
