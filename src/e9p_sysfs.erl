@@ -126,7 +126,11 @@ open(_FID, [~"system_info", KeyB], _Mode, State) ->
     Key = binary_to_atom(KeyB),
     Data = case erlang:system_info(Key) of
                Val when is_binary(Val) -> Val;
-               Val -> iolist_to_binary(io_lib:format("~p", [Val]))
+               Val ->
+                   case io_lib:printable_list(Val) of
+                       true -> unicode:characters_to_binary(Val);
+                       false -> iolist_to_binary(io_lib:format("~p", [Val]))
+                   end
            end,
     {ok, {Data, 0}, State};
 %% ===== Processes =====
