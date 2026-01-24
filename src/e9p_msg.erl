@@ -308,12 +308,16 @@ encode_stat(Stat) ->
              gid => ~"",
              muid => ~""
             }, Stat),
+    FullMode = case e9p:is_type(QID, directory) of
+                   true -> 16#80000000 bor Mode;
+                   false -> Mode
+               end,
     Encoded = [<<
                  Type:2/?int,
                  Dev:4/?int
                >>,
                qid_to_binary(QID),
-               <<Mode:4/?int>>,
+               <<FullMode:4/?int>>,
                time_to_encoded_sec(Atime),
                time_to_encoded_sec(Mtime),
                <<Len:8/?int>>,
