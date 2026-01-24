@@ -1,3 +1,7 @@
+% SPDX-FileCopyrightText: 2026 Łukasz Niemier <~@hauleth.dev>
+%
+% SPDX-License-Identifier: Apache-2.0
+
 -module(e9p_sysfs).
 
 -behaviour(e9p_fs).
