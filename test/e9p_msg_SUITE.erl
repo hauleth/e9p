@@ -17,7 +17,7 @@ stat_encode_decode(_Conf) ->
     Stat = #{
                            type => 0,
                            dev => 0,
-                           qid => e9p:make_qid(directory, 0, 0, []),
+                           qid => e9p:make_qid(regular, 0, 0),
                            mode => 0,
                            atime => 0,
                            mtime => 0,
@@ -35,7 +35,7 @@ rstat_encode_decode(_Conf) ->
     Stat = #{
                            type => 0,
                            dev => 0,
-                           qid => e9p:make_qid(directory, 0, 0, []),
+                           qid => e9p:make_qid(regular, 0, 0),
                            mode => 0,
                            atime => 0,
                            mtime => 0,
