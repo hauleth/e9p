@@ -160,7 +160,7 @@ do_parse(?Rwalk, <<NWQLen:?len, QIDs:(NWQLen * 13)/binary>>) ->
 
 do_parse(?Tread, <<FID:4/?int, Offset:8/?int, Len:4/?int>>) ->
     {ok, #tread{fid = FID, offset = Offset, len = Len}};
-do_parse(?Rread, <<Count:4/?int, Data:Count/?int>>) ->
+do_parse(?Rread, <<Count:4/?int, Data:Count/binary>>) ->
     {ok, #rread{data = Data}};
 do_parse(?Twrite, <<FID:4/?int, Offset:8/?int, Len:4/?int, Data:Len/binary>>) ->
     {ok, #twrite{fid = FID, offset = Offset, data = Data}};
