@@ -81,7 +81,7 @@ loop(#state{socket = Sock} = State) ->
             ok
     end.
 
-handle_message(#tversion{version = ~"9P2000", max_packet_size = MPS}, FIDs, Handler) ->
+handle_message(#tversion{version = <<"9P2000", _/binary>>, max_packet_size = MPS}, FIDs, Handler) ->
     % Currently only "basic" 9p2000 version is supported, without any extensions
     % like `.u` or `.L`
     {ok, #rversion{version = ~"9P2000", max_packet_size = MPS}, FIDs, Handler};
