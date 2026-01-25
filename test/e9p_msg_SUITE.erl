@@ -11,7 +11,14 @@
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("common_test/include/ct.hrl").
 
-all() -> [stat_encode_decode, rstat_encode_decode].
+all() -> [
+          stat_encode_decode,
+          rstat_encode_decode,
+          rclunk_encode_decode,
+          rflush_encode_decode,
+          rwstat_encode_decode,
+          rremove_encode_decode
+         ].
 
 stat_encode_decode(_Conf) ->
     Stat = #{
@@ -50,3 +57,21 @@ rstat_encode_decode(_Conf) ->
     Out = e9p_msg:encode(Tag, Msg),
     Decoded = e9p_msg:parse(iolist_to_binary(Out)),
     ?assertEqual({ok, Tag, Msg}, Decoded).
+
+rclunk_encode_decode(_Conf) ->
+    enc_dec(#rclunk{}).
+
+rflush_encode_decode(_Conf) ->
+    enc_dec(#rflush{}).
+
+rwstat_encode_decode(_Conf) ->
+    enc_dec(#rwstat{}).
+
+rremove_encode_decode(_Conf) ->
+    enc_dec(#rremove{}).
+
+enc_dec(Data) ->
+    Tag = 1,
+    Out = e9p_msg:encode(Tag, Data),
+    Encoded = iolist_to_binary(Out),
+    ?assertEqual({ok, Tag, Data}, e9p_msg:parse(Encoded)).
