@@ -19,7 +19,7 @@ Expose Unix Filesystem as 9p2000 mount
 % Create QID and Stat data for given path.
 qid(Root, Path) ->
     FullPath = filename:join([Root] ++ Path),
-    case file:read_file_info(FullPath, [{time, posix}]) of
+    case file:read_file_info(FullPath, [{time, posix}, raw]) of
         {ok, #file_info{type = Type, inode = Inode} = FI} ->
             QID = e9p:make_qid(Type, 0, Inode),
             Stat = file_info_to_stat(Path, QID, FI),
@@ -90,7 +90,7 @@ walk(_QID, Path, File, #{root := Root} = State) ->
 -doc false.
 stat({QID, _}, Path, #{root := Root} = State) ->
     FullPath = filename:join([Root] ++ Path),
-    case file:read_file_info(FullPath, [{time, posix}]) of
+    case file:read_file_info(FullPath, [{time, posix}, raw]) of
         {ok, FileInfo} ->
             Stat = file_info_to_stat(Path, QID, FileInfo),
             {ok, Stat, State};
@@ -103,7 +103,7 @@ wstat(_QID, Path, Stat, #{root := Root} = State) ->
     FileInfo = stat_to_file_info(Stat),
     FullPath = filename:join([Root] ++ Path),
 
-    case file:write_file_info(FullPath, FileInfo, [{time, posix}]) of
+    case file:write_file_info(FullPath, FileInfo, [{time, posix}, raw]) of
         ok -> {ok, State};
         {error, Reason} ->
             {error, io_lib:format("Couldn't write file stat: ~p", [Reason]),
@@ -115,7 +115,13 @@ open({QID, []}, Path, Mode, #{root := Root} = State) ->
     FullPath = filename:join([Root] ++ Path),
     QS = case e9p:is_type(QID, directory) of
              true ->
-                 {ok, List} = file:list_dir(FullPath),
+                 % Currently `file` module do not expose raw mode for listing
+                 % file directory, so we need to call private `prim_file` module
+                 % to access such functionality. Otherwise we can encounter
+                 % deadlock.
+                 %
+                 % See: https://github.com/erlang/otp/issues/10593
+                 {ok, List} = prim_file:list_dir(FullPath),
                  {dir, List};
              false ->
                  {Trunc, Opts} = translate_mode(Mode),
@@ -141,8 +147,14 @@ remove({QID, _} = FID, Path, #{root := Root} = State0) ->
     FullPath = filename:join([Root] ++ Path),
     {ok, State} = clunk(FID, State0),
     case case e9p:is_type(QID, directory) of
-             true -> file:del_dir(FullPath);
-             false -> file:delete(FullPath)
+             % Currently `file` module do not expose raw mode for listing
+             % file directory, so we need to call private `prim_file` module
+             % to access such functionality. Otherwise we can encounter
+             % deadlock.
+             %
+             % See: https://github.com/erlang/otp/issues/10593
+             true -> prim_file:del_dir(FullPath);
+             false -> file:delete(FullPath, [raw])
          end of
         ok -> {ok, State};
         {error, Reason} ->

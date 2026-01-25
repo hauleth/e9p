@@ -26,7 +26,6 @@ init_per_suite(Config) ->
     ok = file:make_dir(Path),
     {ok, PID} = e9p_server:start(Port, {e9p_sysfs, []}),
     ct:pal(Path),
-    ct:sleep(1000),
     Cmd = io_lib:format("9pfs -p ~B localhost ~s",
                         [Port, Path]),
     ct:pal(Cmd),

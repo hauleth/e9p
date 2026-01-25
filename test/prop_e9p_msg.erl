@@ -31,9 +31,6 @@ qid_type() -> union([directory,
 qid() ->
     ?LET({Type, Version, Path}, {qid_type(), int(4), int(8)},
          e9p:make_qid(Type, Version, Path)).
-qid(Type) ->
-    ?LET({Version, Path}, {int(4), int(8)},
-         e9p:make_qid(Type, Version, Path)).
 
 prop_tversion() ->
     ?FORALL({Version, MPS}, {bin_str(), int(4)},
@@ -120,7 +117,7 @@ prop_tstat() ->
             enc_dec(#tstat{fid = FID})).
 prop_rstat() ->
     ?FORALL({QID, Type, Dev, Mode, Atime, Mtime, Len, Name, Uid, Gid, Muid},
-            {qid(), int(2), int(2), int(4), int(4), int(4), int(8), bin_str(), bin_str(),
+            {qid(), int(2), int(2), integer(0, 8#777), int(4), int(4), int(8), bin_str(), bin_str(),
              bin_str(), bin_str()},
             begin
                 enc_dec(#rstat{
