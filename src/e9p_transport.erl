@@ -16,21 +16,14 @@ send(Socket, Tag, Message) ->
     gen_tcp:send(Socket, [<<Size:4/?int>>, Encoded]).
 
 read(Socket) ->
-    case gen_tcp:recv(Socket, 4) of
-        {ok, <<Size:4/?int>>} ->
-            case gen_tcp:recv(Socket, Size - 4) of
-                {ok, Data} when is_binary(Data) ->
-                    case e9p_msg:parse(Data) of
-                        {ok, Tag, Msg} ->
-                            {ok, Tag, Msg};
-                        {error, _} = Error ->
-                            Error
-                    end;
-                {error, _} = Error ->
-                    Error
-            end;
-        {error, _} = Error ->
-            Error
+    maybe
+        {ok, <<Size:4/?int>>} ?= gen_tcp:recv(Socket, 4),
+        {ok, Data} ?= gen_tcp:recv(Socket, Size - 4),
+        true = is_binary(Data),
+        {ok, Tag, Msg} ?= e9p_msg:parse(Data),
+        {ok, Tag, Msg}
+    else
+        {error, _} = Error -> Error
     end.
 
 read_stream(<<Size:4/?int, Data:(Size - 4)/binary, Rest/binary>> = Input) ->
