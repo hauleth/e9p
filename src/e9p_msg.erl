@@ -173,7 +173,7 @@ do_parse(Type, Data) ->
 parse_stat(<<_Size:2/?int,
              Type:2/?int,
              Dev:4/?int,
-             QID:13/binary,
+             RawQID:13/binary,
              Mode:4/?int,
              Atime:4/?int,
              Mtime:4/?int,
@@ -183,11 +183,13 @@ parse_stat(<<_Size:2/?int,
              GLen:?len, Gid:GLen/binary,
              MULen:?len, MUid:MULen/binary>>)
 ->
+    QID = binary_to_qid(RawQID),
+    Flags = qid_to_mode_flags(QID),
     {ok, #{
            type => Type,
            dev => Dev,
-           qid => binary_to_qid(QID),
-           mode => Mode,
+           qid => QID,
+           mode => Mode band (bnot Flags),
            atime => Atime,
            mtime => Mtime,
            length => Len,
@@ -308,10 +310,7 @@ encode_stat(Stat) ->
              gid => ~"",
              muid => ~""
             }, Stat),
-    FullMode = case e9p:is_type(QID, directory) of
-                   true -> 16#80000000 bor Mode;
-                   false -> Mode
-               end,
+    FullMode = qid_to_mode_flags(QID) bor Mode,
     Encoded = [<<
                  Type:2/?int,
                  Dev:4/?int
@@ -329,6 +328,8 @@ encode_stat(Stat) ->
     ELen = iolist_size(Encoded),
     [<<ELen:?len>> | Encoded].
 
+qid_to_mode_flags(#qid{type = Type}) ->
+    (Type band 2#11100100) bsl 24.
 
 %% ========== Utilities ==========
 

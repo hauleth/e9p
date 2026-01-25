@@ -120,7 +120,7 @@ prop_tstat() ->
             enc_dec(#tstat{fid = FID})).
 prop_rstat() ->
     ?FORALL({QID, Type, Dev, Mode, Atime, Mtime, Len, Name, Uid, Gid, Muid},
-            {qid(regular), int(2), int(2), int(4), int(4), int(4), int(8), bin_str(), bin_str(),
+            {qid(), int(2), int(2), int(4), int(4), int(4), int(8), bin_str(), bin_str(),
              bin_str(), bin_str()},
             begin
                 enc_dec(#rstat{
