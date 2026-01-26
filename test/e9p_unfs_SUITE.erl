@@ -6,7 +6,11 @@
 -include_lib("common_test/include/ct.hrl").
 
 all() -> [
-          can_list_mount_content
+          list_mount,
+          read_file
+          %% Ignore this test for now, as UID/GID translation is not possible
+          %% right now until we implement 9p2000.u extension
+          % write_to_existing_file
          ].
 
 init_per_suite(Config) ->
@@ -32,12 +36,27 @@ end_per_suite(Config) ->
     erlang:exit(PID, normal),
     Config.
 
-can_list_mount_content(Config) ->
+list_mount(Config) ->
     Source = ?config(source, Config),
     Mount = ?config(mount, Config),
     file:write_file([Source, "/bar"], "example data"),
     ct:pal(Mount),
     ?assertEqual(["bar"], ls(Mount)).
+
+read_file(Config) ->
+    Source = ?config(source, Config),
+    Mount = ?config(mount, Config),
+    file:write_file([Source, "/bar"], "example data"),
+    ct:pal(Mount),
+    ?assertEqual({ok, ~"example data"}, file:read_file([Mount, "/bar"])).
+
+write_to_existing_file(Config) ->
+    Source = ?config(source, Config),
+    Mount = ?config(mount, Config),
+    file:write_file([Source, "/bar"], ""),
+    ct:pal(Mount),
+    ok = file:write_file([Mount, "/bar"], "another data"),
+    ?assertEqual({ok, ~"another data"}, file:read_file([Source, "/bar"])).
 
 %% Helpers
 
